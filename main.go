@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -130,17 +132,35 @@ func main() {
 	odata.Verbose = false
 
 	// Create the one and only http client we'll be using, with a cookie jar enabled to keep reusing our session
-	client = &odata.Client{}
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	client = &odata.Client{http.Client{Transport: tr}}
 	cookieJar, _ := cookiejar.New(nil)
 	client.Jar = cookieJar
 
 	// Validate that the TM1 server is accessable by requesting the version of the server
 	req, _ := http.NewRequest("GET", tm1ServiceRootURL+"Configuration/ProductVersion/$value", nil)
 
-	// Since this is our initial request we'll have to provide a user name and password, also
-	// conveniently stored in the environment variables, to authenticate.
-	// Note: using authentication mode 1, TM1 authentication, which maps to basic authentication in HTTP[S]
-	req.SetBasicAuth(os.Getenv("TM1_USER"), os.Getenv("TM1_PASSWORD"))
+	// Since this is our initial request we'll have to provide credentials to be able to authenticate.
+	// We support Basic and CAM authentication modes in this example. The authentication mode used is
+	// defined by the TM1_AUTHENTICATION environment variable and, if specified, needs to be either
+	// "TM1", to use standard TM1 authentication, or "CAM" to use CAM. If no value is specified it
+	// defaults to attempting Basic authentication.
+	// Note: One could get fancy and issue a request against the server and respond to a 401 by checking
+	// the WWW-Authorization header to find out what security is supported by the server if one wanted.
+	switch os.Getenv("TM1_AUTHENTICATION") {
+	case "CAM":
+		// Add the Authorization header triggering the CAM authentication
+		cred := b64.StdEncoding.EncodeToString([]byte(os.Getenv("TM1_USER") + ":" + os.Getenv("TM1_PASSWORD") + ":" + os.Getenv("TM1_CAM_NAMESPACE")))
+		fmt.Println(cred)
+		req.Header.Add("Authorization", "CAMNamespace "+cred)
+
+	case "TM1":
+		fallthrough
+
+	default:
+		// TM1 authentication maps to basic HTTP authentication, set accordingly
+		req.SetBasicAuth(os.Getenv("TM1_USER"), os.Getenv("TM1_PASSWORD"))
+	}
 
 	// We'll expect text back in this case but we'll simply dump the content out and won't do any
 	// content type verification here
