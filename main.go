@@ -151,7 +151,6 @@ func main() {
 	case "CAM":
 		// Add the Authorization header triggering the CAM authentication
 		cred := b64.StdEncoding.EncodeToString([]byte(os.Getenv("TM1_USER") + ":" + os.Getenv("TM1_PASSWORD") + ":" + os.Getenv("TM1_CAM_NAMESPACE")))
-		fmt.Println(cred)
 		req.Header.Add("Authorization", "CAMNamespace "+cred)
 
 	case "TM1":
